@@ -379,6 +379,14 @@ const linkOrderTerms = [
   "Возврат - бесплатно.",
 ] as const;
 
+const courierOrderTerms = [
+  "Приём заказов - ежедневно, круглосуточно, без выходных.",
+  "Стоимость доставки рассчитывается по общему весу заказа.",
+  "Перед отправкой убедитесь, что заказ оформлен на адрес нашего склада и нашего получателя.",
+  "Если в заказе есть наложенный платёж, мы оплатим его за вас. Стоимость услуги - 10% от суммы платежа.",
+  "Хрупкий или дорогой груз можно осмотреть при получении. Стоимость услуги - 100 ₽ за единицу товара.",
+] as const;
+
 const disclaimerTitle = "Дисклеймер";
 const disclaimerParagraphs = [
   "Сервис «Сарма Экспресс» является независимой службой доставки. Мы действуем исключительно как посредник, выполняя поручения клиентов по выкупу и транспортировке товаров. Мы не являемся представителем, партнером, агентом или пунктом выдачи заказов Wildberries, OZON, Яндекс Маркет, Lamoda и не аффилированы с ними.",
@@ -706,13 +714,12 @@ function MarketplaceInfoBlock({ guide }: { guide: MarketplacePickupGuide }) {
 function CourierAddressInfoPanel() {
   return (
     <InstructionPanel
-      title="Заказы курьером оформляйте на наш адрес в Ростове"
+      title="Как передать заказ"
       steps={[
-        "Адрес: г. Ростов-на-Дону, ул. Арсенальная д.1.",
-        "Получатель: Игнатенко Глеб Игоревич.",
-        "Тел. +7 (989) 500-00-38.",
-        "График: с 9:00 до 18:00, ЕЖЕДНЕВНО.",
-        "Обязательно указывайте график работы для курьера в комментариях.",
+        "Загрузите QR-код, штрих-код или скриншот заказа.",
+        "Укажите отправителя или интернет-магазин.",
+        "Если есть номер заказа или код получения, заполните эти поля.",
+        "Выберите пункт выдачи, куда доставить заказ.",
       ]}
     />
   );
@@ -1737,8 +1744,8 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
             firstName: activePickup.firstName,
             lastName: activePickup.lastName,
             phone: activePickup.phone,
-            itemCount: usesTrackingPickupFields || isBulkyPaid || hidesPaidItemAmountFields ? undefined : Number(activePickup.itemCount),
-            totalAmount: usesTrackingPickupFields || isBulkyPaid || hidesPaidItemAmountFields ? undefined : Number(activePickup.totalAmount),
+            itemCount: usesTrackingPickupFields || isCourierPaid || isBulkyPaid || hidesPaidItemAmountFields ? undefined : Number(activePickup.itemCount),
+            totalAmount: usesTrackingPickupFields || isCourierPaid || isBulkyPaid || hidesPaidItemAmountFields ? undefined : Number(activePickup.totalAmount),
             trackingNumber: usesTrackingPickupFields || isDetmirPaid || isGoldapplePaid || isLetualPaid || isCourierPaid || isBulkyPaid ? activePickup.trackingNumber : undefined,
             shipmentNumber: isCdekPaid ? activePickup.shipmentNumber : undefined,
             senderName: isCourierPaid || isBulkyPaid ? activePickup.senderName : undefined,
@@ -1760,7 +1767,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
     }
     if (isBulkyPaid && activePickup.bulkyAttachments.length === 0) nextErrors.attachment = paidFieldCopy.attachmentRequiredError;
     if (activeFlow === "pickup_paid" && !usesTrackingPickupFields && !isBulkyPaid && !activePickup.attachment) nextErrors.attachment = paidFieldCopy.attachmentRequiredError;
-    if ((usesMarketplacePickupGuide || activeFlow === "pickup_standard") && !activePickup.termsAccepted) {
+    if ((usesMarketplacePickupGuide || isCourierPaid || activeFlow === "pickup_standard") && !activePickup.termsAccepted) {
       nextErrors.termsAccepted = "Подтвердите согласие с условиями доставки, оплаты и договором оферты";
     }
     if (Object.keys(nextErrors).length > 0) {
@@ -1780,11 +1787,11 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
           size: activeFlow === "pickup_standard" ? activePickup.size.trim() || undefined : undefined,
           additionalInfo: activeFlow === "pickup_standard" ? activePickup.additionalInfo.trim() || undefined : undefined,
           itemCount:
-            activeFlow === "pickup_paid" && !usesTrackingPickupFields && !isBulkyPaid && !hidesPaidItemAmountFields
+            activeFlow === "pickup_paid" && !usesTrackingPickupFields && !isCourierPaid && !isBulkyPaid && !hidesPaidItemAmountFields
               ? activePickup.itemCount
               : undefined,
           totalAmount:
-            activeFlow === "pickup_paid" && !usesTrackingPickupFields && !isBulkyPaid && !hidesPaidItemAmountFields
+            activeFlow === "pickup_paid" && !usesTrackingPickupFields && !isCourierPaid && !isBulkyPaid && !hidesPaidItemAmountFields
               ? activePickup.totalAmount
               : undefined,
           trackingNumber: usesTrackingPickupFields || isDetmirPaid || isGoldapplePaid || isLetualPaid || isCourierPaid || isBulkyPaid ? activePickup.trackingNumber : undefined,
@@ -2368,13 +2375,17 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
       const pickupStepTitle = activeMarketplaceGuide
         ? activeMarketplaceGuide.title
         : paid
-          ? (usesTrackingPickupFields ? "Заполните данные для получения" : "Загрузите код и заполните детали")
+          ? isCourierPaid
+            ? "Передайте данные заказа"
+            : (usesTrackingPickupFields ? "Заполните данные для получения" : "Загрузите код и заполните детали")
           : "Детали заказа";
       const pickupStepDescription =
         activeMarketplaceGuide
           ? activeMarketplaceGuide.subtitle
           : paid
-          ? isCdekPaid
+          ? isCourierPaid
+            ? "Загрузите QR-код, штрих-код или скриншот, чтобы мы могли получить заказ за вас."
+            : isCdekPaid
             ? "Укажите имя, фамилию, телефон и заполните трек-номер или номер отправления ИМ. Код получения и скриншот отправления можно добавить по желанию."
             : isTrackingCodePaid
               ? "Укажите имя, фамилию, телефон, трек-номер и код получения. Скриншот отправления можно приложить по желанию."
@@ -2427,7 +2438,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
                 }}
               >
             <div className="rounded-[24px] border border-white/65 bg-[linear-gradient(180deg,#ffffff_0%,#eef5ff_100%)] px-5 py-4 text-sm leading-7 text-[#5f789d] shadow-[0_14px_28px_rgba(39,77,146,0.08)]">
-              Выбран маркетплейс: <span className="font-semibold text-[#13345f]">{currentMarketplace}</span>
+              {isSpecial ? "Выбран сценарий" : "Выбран маркетплейс"}: <span className="font-semibold text-[#13345f]">{currentMarketplace}</span>
             </div>
             {usesMarketplacePickupGuide ? (
               <>
@@ -2440,18 +2451,25 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
                 <p className="text-lg font-extrabold text-[#13345f]">Укажите ваши данные для получения посылки:</p>
               </div>
             ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className={`grid gap-4 ${isCourierPaid ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               <Field label="Имя" htmlFor={`${activeFlow}-firstName`} error={activePickup.errors.firstName}>
                 <Input id={`${activeFlow}-firstName`} autoFocus placeholder="Введите имя" value={activePickup.firstName} onChange={(event) => updatePickup({ firstName: event.target.value })} />
               </Field>
               <Field label="Фамилия" htmlFor={`${activeFlow}-lastName`} error={activePickup.errors.lastName}>
                 <Input id={`${activeFlow}-lastName`} placeholder="Введите фамилию" value={activePickup.lastName} onChange={(event) => updatePickup({ lastName: event.target.value })} />
               </Field>
+              {isCourierPaid ? (
+                <Field label="Телефон" htmlFor={`${activeFlow}-phone`} hint="Формат: +7XXXXXXXXXX" error={activePickup.errors.phone}>
+                  <Input id={`${activeFlow}-phone`} placeholder="Введите номер телефона" value={activePickup.phone} onChange={(event) => updatePickup({ phone: event.target.value })} />
+                </Field>
+              ) : null}
             </div>
 
-            <Field label="Телефон" htmlFor={`${activeFlow}-phone`} hint="Формат +7XXXXXXXXXX" error={activePickup.errors.phone}>
-              <Input id={`${activeFlow}-phone`} placeholder="+7 (___) ___-__-__" value={activePickup.phone} onChange={(event) => updatePickup({ phone: event.target.value })} />
-            </Field>
+            {!isCourierPaid ? (
+              <Field label="Телефон" htmlFor={`${activeFlow}-phone`} hint="Формат +7XXXXXXXXXX" error={activePickup.errors.phone}>
+                <Input id={`${activeFlow}-phone`} placeholder="+7 (___) ___-__-__" value={activePickup.phone} onChange={(event) => updatePickup({ phone: event.target.value })} />
+              </Field>
+            ) : null}
 
             {isCdekPaid ? (
               <>
@@ -2727,7 +2745,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
                     <Field
                       label={
                         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span>Название отправителя или интернет-магазина</span>
+                          <span>Отправитель или интернет-магазин</span>
                           <span className={fieldStateLabelClass}>
                             Обязательное поле
                           </span>
@@ -2738,7 +2756,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
                     >
                       <Input
                         id={`${activeFlow}-senderName`}
-                        placeholder="Например, Ривгош, ИП Петров, ООО “Сарма”"
+                        placeholder="Например: Wildberries, Ozon, ООО Ромашка, ИП Петров"
                         value={activePickup.senderName}
                         onChange={(event) => updatePickup({ senderName: event.target.value })}
                       />
@@ -2785,28 +2803,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
                       </Field>
                     </div>
 
-                    {!hidesPaidItemAmountFields ? (
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                          label={paidFieldCopy.itemCountLabel}
-                          htmlFor={`${activeFlow}-count`}
-                          hint="Введите общее количество товаров для получения"
-                          error={activePickup.errors.itemCount}
-                        >
-                          <InputWithSuffix id={`${activeFlow}-count`} type="number" min="1" suffix="шт." value={activePickup.itemCount} onChange={(event) => updatePickup({ itemCount: event.target.value })} />
-                        </Field>
-                        <Field
-                          label={paidFieldCopy.totalAmountLabel}
-                          htmlFor={`${activeFlow}-amount`}
-                          hint="Укажите, пожалуйста, общую сумму всех товаров в заказе"
-                          error={activePickup.errors.totalAmount}
-                        >
-                          <InputWithSuffix id={`${activeFlow}-amount`} type="number" min="1" suffix="₽" value={activePickup.totalAmount} onChange={(event) => updatePickup({ totalAmount: event.target.value })} />
-                        </Field>
-                      </div>
-                    ) : null}
-
-                    <Field label={paidFieldCopy.attachmentLabel} htmlFor={`${activeFlow}-attachment`} hint={paidFieldCopy.attachmentHint} error={activePickup.errors.attachment}>
+                    <Field label="Скриншот заказа, QR-код или штрих-код" htmlFor={`${activeFlow}-attachment`} hint="Загрузите скриншот заказа, QR-код или штрих-код. PNG, JPG или PDF до 10 MB." error={activePickup.errors.attachment}>
                       <FileUploadCard
                         id={`${activeFlow}-attachment`}
                         accept=".jpg,.jpeg,.png,.pdf"
@@ -3027,22 +3024,29 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
               </Field>
             ) : null}
 
-            {usesMarketplacePickupGuide ? (
+            {usesMarketplacePickupGuide || isCourierPaid ? (
               <div className="rounded-[24px] border border-[#d7e4f7] bg-white/86 px-5 py-5 text-sm leading-7 text-[#4f6688] shadow-[0_14px_28px_rgba(39,77,146,0.08)]">
                 <p className="font-extrabold text-[#13345f]">Условия доставки и оплаты:</p>
                 <ul className="mt-3 space-y-2">
-                  {(activeMarketplaceGuide?.terms ?? wildberriesDeliveryTerms).map((term) => (
+                  {(isCourierPaid ? courierOrderTerms : activeMarketplaceGuide?.terms ?? wildberriesDeliveryTerms).map((term) => (
                     <li key={term} className="flex gap-2">
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#4c8ce6]" />
                       <span>{term}</span>
                     </li>
                   ))}
                 </ul>
-                {activeMarketplaceGuide?.inspectionOption ? (
+                {activeMarketplaceGuide?.inspectionOption || isCourierPaid ? (
                   <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[18px] border border-[#d7e4f7] bg-[#f5f9ff] px-4 py-3">
                     <input type="checkbox" className="mt-1 h-4 w-4 rounded border-[#b7cff4] text-[#3b74cf]" />
-                    <span className="text-sm font-semibold leading-6 text-[#13345f]">{activeMarketplaceGuide.inspectionOption}</span>
+                    <span className="text-sm font-semibold leading-6 text-[#13345f]">
+                      {isCourierPaid ? "Хрупкий / дорогой груз. Нужно осмотреть при получении." : activeMarketplaceGuide?.inspectionOption}
+                    </span>
                   </label>
+                ) : null}
+                {isCourierPaid ? (
+                  <Field label="Укажите количество мест для осмотра" htmlFor={`${activeFlow}-inspectionCount`}>
+                    <Input id={`${activeFlow}-inspectionCount`} placeholder="Укажите количество мест" />
+                  </Field>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-[#3f74cb]">
                   <a href="/calculator" className="underline underline-offset-4">
@@ -3168,10 +3172,10 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
               </SecondaryButton>
               <PrimaryButton
                 type="submit"
-                disabled={pending || ((usesMarketplacePickupGuide || !paid) && !activePickup.termsAccepted)}
+                disabled={pending || ((usesMarketplacePickupGuide || isCourierPaid || !paid) && !activePickup.termsAccepted)}
                 className="rounded-[22px] bg-[linear-gradient(180deg,#4c8ce6_0%,#3b74cf_100%)] px-8 text-base font-extrabold shadow-[0_20px_36px_rgba(43,92,180,0.24)]"
               >
-                {pending ? "Создаём..." : usesMarketplacePickupGuide ? "Передать заказ" : !paid ? "Сделать заказ" : "Продолжить"}
+                {pending ? "Создаём..." : usesMarketplacePickupGuide || isCourierPaid ? "Передать заказ" : !paid ? "Сделать заказ" : "Продолжить"}
               </PrimaryButton>
             </div>
               </form>
