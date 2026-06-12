@@ -38,7 +38,7 @@ import {
   type TransportCompanyId,
 } from "shared";
 
-import { cancelOrder, createHomeDeliveryOrder, createPickupOrder, fetchOrder, lookupOrder as lookupTrackedOrder } from "@/lib/api";
+import { ApiError, cancelOrder, createHomeDeliveryOrder, createPickupOrder, fetchOrder, lookupOrder as lookupTrackedOrder } from "@/lib/api";
 import { SarmaExpressHeader } from "@/components/sarma-express-header";
 
 import { FlowShell } from "./flow-shell";
@@ -346,8 +346,10 @@ function Field({
   error?: string;
   children: ReactNode;
 }) {
+  const errorFieldName = htmlFor.replace(/^(pickup_paid|pickup_standard|delivery|cancel)-/, "").replace(/-modern$/, "");
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-error-field={errorFieldName} data-has-error={error ? "true" : "false"}>
       <label htmlFor={htmlFor} className="block text-sm font-semibold text-[color:var(--foreground)]">
         {label}
       </label>
@@ -359,6 +361,64 @@ function Field({
 }
 
 const fieldStateLabelClass = "whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--accent-strong)]";
+
+type ApiValidationIssue = {
+  message?: string;
+  path?: Array<string | number>;
+};
+
+function readApiValidationIssues(details: unknown): ApiValidationIssue[] {
+  if (!details || typeof details !== "object") {
+    return [];
+  }
+
+  if ("issues" in details && Array.isArray((details as { issues?: unknown }).issues)) {
+    return (details as { issues: ApiValidationIssue[] }).issues;
+  }
+
+  if ("message" in details && typeof (details as { message?: unknown }).message === "string") {
+    try {
+      const parsed = JSON.parse((details as { message: string }).message);
+      return Array.isArray(parsed) ? (parsed as ApiValidationIssue[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function apiValidationErrorsToFieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError)) {
+    return {};
+  }
+
+  return readApiValidationIssues(error.details).reduce<Record<string, string>>((errors, issue) => {
+    const field = String(issue.path?.[0] ?? "form");
+    if (!errors[field] && issue.message) {
+      errors[field] = issue.message;
+    }
+    return errors;
+  }, {});
+}
+
+function scrollToFirstPickupError(errors: Record<string, string>, activeFlow: "pickup_standard" | "pickup_paid") {
+  const firstField = Object.keys(errors).find((field) => field !== "form");
+  if (!firstField) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const target =
+      document.getElementById(`${activeFlow}-${firstField}`) ??
+      document.getElementById(`${activeFlow}-${firstField}-modern`) ??
+      document.querySelector(`[data-error-field="${CSS.escape(firstField)}"]`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (target instanceof HTMLElement && "focus" in target) {
+      target.focus({ preventScroll: true });
+    }
+  });
+}
 
 const wildberriesDeliveryTerms = [
   "Никаких %. Стоимость доставки рассчитывается по общему весу заказа.",
@@ -1771,7 +1831,14 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
       nextErrors.termsAccepted = "Подтвердите согласие с условиями доставки, оплаты и договором оферты";
     }
     if (Object.keys(nextErrors).length > 0) {
-      updatePickup({ errors: nextErrors });
+      const errors = {
+        ...nextErrors,
+        form:
+          nextErrors.form ??
+          "Проверьте обязательные поля выше: выберите пункт выдачи, заполните номер/код и загрузите файл, если он требуется.",
+      };
+      updatePickup({ errors });
+      scrollToFirstPickupError(errors, activeFlow as "pickup_standard" | "pickup_paid");
       return;
     }
 
@@ -1805,7 +1872,13 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
         });
         setActivePickup((current) => ({ ...current, step: 3, result: response.order, errors: {} }));
       } catch (error) {
-        updatePickup({ errors: { form: error instanceof Error ? error.message : "Не удалось создать заказ" } });
+        const fieldErrors = apiValidationErrorsToFieldErrors(error);
+        const errors = {
+          ...fieldErrors,
+          form: Object.keys(fieldErrors).length > 0 ? "Проверьте выделенные поля." : error instanceof Error ? error.message : "Не удалось создать заказ",
+        };
+        updatePickup({ errors });
+        scrollToFirstPickupError(errors, activeFlow as "pickup_standard" | "pickup_paid");
       }
     });
   };
@@ -3172,7 +3245,7 @@ export function SuperboxApp({ initialFlow = "overview" }: { initialFlow?: FlowId
               </SecondaryButton>
               <PrimaryButton
                 type="submit"
-                disabled={pending || ((usesMarketplacePickupGuide || isCourierPaid || !paid) && !activePickup.termsAccepted)}
+                disabled={pending}
                 className="rounded-[22px] bg-[linear-gradient(180deg,#4c8ce6_0%,#3b74cf_100%)] px-8 text-base font-extrabold shadow-[0_20px_36px_rgba(43,92,180,0.24)]"
               >
                 {pending ? "Создаём..." : usesMarketplacePickupGuide || isCourierPaid ? "Передать заказ" : !paid ? "Сделать заказ" : "Продолжить"}
